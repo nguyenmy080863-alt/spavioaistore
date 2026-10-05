@@ -97,7 +97,7 @@ const DeliveryCard = ({
 const AdminSalesOrderDetail = () => {
   const { orderId = "" } = useParams();
   const queryClient = useQueryClient();
-  const [carrier, setCarrier] = useState("");
+  const [carrierInput, setCarrierInput] = useState<string | null>(null);
   const [tracking, setTracking] = useState("");
   const [qty, setQty] = useState<Record<string, string>>({});
 
@@ -105,6 +105,9 @@ const AdminSalesOrderDetail = () => {
     queryKey: ["sales-order", orderId],
     queryFn: () => fetchSalesOrder(orderId),
   });
+
+  // Prefilled with what the customer chose at checkout, until staff type something else.
+  const carrier = carrierInput ?? order?.shipping_carrier ?? "";
 
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ["sales-orders"] });
@@ -168,7 +171,7 @@ const AdminSalesOrderDetail = () => {
     onSuccess: () => {
       toast.success("Delivery created");
       setQty({});
-      setCarrier("");
+      setCarrierInput(null);
       setTracking("");
       refresh();
     },
@@ -213,7 +216,8 @@ const AdminSalesOrderDetail = () => {
             {order.customer_phone && ` · ${order.customer_phone}`}
           </p>
           <p className="text-muted-foreground">
-            Shipping {formatPrice(Number(order.shipping_cost))} · Charged at checkout{" "}
+            Shipping {order.shipping_carrier && `${order.shipping_carrier}${order.shipping_service ? ` ${order.shipping_service}` : ""} · `}
+            {formatPrice(Number(order.shipping_cost))} · Charged at checkout{" "}
             {formatPrice(Number(order.amount_charged))}
             {Number(order.balance_due) > 0 && ` · Preorder balance due at shipping ${formatPrice(Number(order.balance_due))}`}
             {order.payment_method && ` · ${order.payment_method}`}
@@ -345,7 +349,7 @@ const AdminSalesOrderDetail = () => {
                 </div>
               ))}
             <div className="flex flex-wrap gap-3">
-              <Input placeholder="Carrier" value={carrier} onChange={(e) => setCarrier(e.target.value)} className="w-44" maxLength={80} />
+              <Input placeholder="Carrier" value={carrier} onChange={(e) => setCarrierInput(e.target.value)} className="w-44" maxLength={80} />
               <Input placeholder="Tracking number" value={tracking} onChange={(e) => setTracking(e.target.value)} className="w-56" maxLength={80} />
             </div>
             <Button size="sm" disabled={busy} onClick={() => createDelivery.mutate()}>

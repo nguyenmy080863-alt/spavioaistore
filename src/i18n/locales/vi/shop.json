@@ -164,6 +164,8 @@
     "title": "Thanh toán",
     "deliveryService": "Dịch vụ giao hàng",
     "multiCarrier": "Nhiều đơn vị vận chuyển",
+    "shippingPending": "Tính sau khi nhập địa chỉ",
+    "shippingEnterAddress": "Nhập địa chỉ và mã bưu chính để xem các phương thức và giá vận chuyển.",
     "paymentMethod": "Phương thức thanh toán",
     "encryption": "Mã hóa 256-bit",
     "paypalNote": "Chuyển khoản tức thì",

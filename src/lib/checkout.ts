@@ -54,6 +54,20 @@ export const placeOrder = async (input: PlaceOrderInput): Promise<PlacedOrder> =
   return data as PlacedOrder;
 };
 
+/**
+ * Saves the carrier and service the customer chose, so staff see it on the order. Needs migration
+ * 0025; a failure is ignored on purpose, because it must never block a payment.
+ */
+export const recordOrderShippingMethod = async (orderNumber: string, email: string, carrier: string, service: string) => {
+  const { error } = await db.rpc("set_order_shipping_method", {
+    p_order_number: orderNumber,
+    p_email: email,
+    p_carrier: carrier,
+    p_service: service,
+  });
+  if (error) console.warn("Could not save the shipping method:", error.message);
+};
+
 /** Stores the payment reference on the order; an admin still has to mark the order as paid. */
 export const recordOrderPayment = (orderNumber: string, email: string, reference: string) =>
   run(db.rpc("record_order_payment", { p_order_number: orderNumber, p_email: email, p_reference: reference }));

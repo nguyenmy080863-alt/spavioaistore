@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import { X, Minus, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "@/i18n/LocaleLink";
@@ -19,16 +20,18 @@ const ShoppingBag = ({ isOpen, onClose, onViewFavorites }: ShoppingBagProps) => 
 
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 h-screen">
+  // Portal to <body>: the header <nav> uses backdrop-blur, which would otherwise
+  // become the containing block for this fixed overlay.
+  return createPortal(
+    <div className="fixed inset-0 z-50 h-dvh">
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/50 h-screen"
+        className="absolute inset-0 bg-black/50"
         onClick={onClose}
       />
 
       {/* Off-canvas panel */}
-      <div className="absolute right-0 top-0 h-screen w-full sm:w-96 bg-background border-l border-border animate-slide-in-right flex flex-col">
+      <div className="absolute right-3 top-3 bottom-3 sm:right-5 sm:top-5 sm:bottom-5 w-[calc(100%-1.5rem)] sm:w-96 overflow-hidden rounded-xl bg-background border border-border shadow-2xl animate-slide-in-right flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-border">
           <h2 className="text-lg font-light text-foreground">{t("shoppingBag.title")}</h2>
@@ -42,7 +45,7 @@ const ShoppingBag = ({ isOpen, onClose, onViewFavorites }: ShoppingBagProps) => 
         </div>
 
         {/* Content */}
-        <div className="flex-1 flex flex-col p-6">
+        <div className="flex-1 min-h-0 flex flex-col p-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
           {/* Mobile favorites toggle - only show on mobile */}
           {onViewFavorites && (
             <div className="md:hidden mb-6 pb-6 border-b border-border">
@@ -194,7 +197,8 @@ const ShoppingBag = ({ isOpen, onClose, onViewFavorites }: ShoppingBagProps) => 
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };
 

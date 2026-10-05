@@ -16,6 +16,8 @@ import { json, preflight, requireRole, serviceClient } from "../_shared/http.ts"
 const PUBLIC_KEY = Deno.env.get("SENDCLOUD_PUBLIC_KEY");
 const SECRET_KEY = Deno.env.get("SENDCLOUD_SECRET_KEY");
 const API = "https://panel.sendcloud.sc/api/v2";
+// Return labels use a real carrier, so they stay off while SENDCLOUD_TEST_ONLY is not "false".
+const TEST_ONLY = (Deno.env.get("SENDCLOUD_TEST_ONLY") ?? "true").trim().toLowerCase() !== "false";
 const NO_DEDUCTION_REASONS = ["defective", "wrong_item"];
 
 const COUNTRY_CODES: Record<string, string> = {
@@ -41,6 +43,9 @@ Deno.serve(async (request) => {
 
   if (!PUBLIC_KEY || !SECRET_KEY) {
     return json({ error: "sendcloud_not_connected", message: "Sendcloud is not connected yet." }, 503);
+  }
+  if (TEST_ONLY) {
+    return json({ error: "Return labels are switched off while Sendcloud is in test-labels-only mode." }, 503);
   }
   const warehouse = {
     name: Deno.env.get("RETURN_ADDRESS_NAME"),

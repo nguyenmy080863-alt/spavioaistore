@@ -165,6 +165,8 @@
     "title": "Kasse",
     "deliveryService": "Versandart",
     "multiCarrier": "Mehrere Versanddienstleister",
+    "shippingPending": "Wird nach Eingabe der Adresse berechnet",
+    "shippingEnterAddress": "Gib Straße und Postleitzahl ein, um Versandoptionen und Preise zu sehen.",
     "paymentMethod": "Zahlungsart",
     "encryption": "256-Bit-Verschlüsselung",
     "paypalNote": "Sofortige Überweisung",

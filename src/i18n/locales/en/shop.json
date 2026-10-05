@@ -165,6 +165,8 @@
     "title": "Checkout",
     "deliveryService": "Delivery Service",
     "multiCarrier": "Multi-carrier",
+    "shippingPending": "Calculated after you enter your address",
+    "shippingEnterAddress": "Enter your street address and postal code to see shipping options and prices.",
     "paymentMethod": "Payment Method",
     "encryption": "256-bit encryption",
     "paypalNote": "Instant transfer",

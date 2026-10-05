@@ -15,13 +15,14 @@ import { formatPrice, LOCAL_ASSETS, collectionImage } from "@/data/products";
 import { useTranslation } from "react-i18next";
 import {
   getSendcloudShippingMethods,
-  DEFAULT_SENDCLOUD_SHIPPING_METHODS,
   type SendcloudShippingMethod
 } from "@/lib/sendcloud";
 import SEO from "@/components/SEO";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAdminAuth } from "@/context/AdminAuthContext";
-import { canStoreOrders, placeOrder, recordOrderPayment, type PlacedOrder } from "@/lib/checkout";
+import { canStoreOrders, placeOrder, recordOrderPayment, recordOrderShippingMethod, type PlacedOrder } from "@/lib/checkout";
+import { fetchCheckoutRates } from "@/lib/shippingRates";
+import { isoCountry } from "@/lib/shipping";
 import { clearStoredCode, getStoredCode, previewCart } from "@/lib/discounts";
 import { applyGiftCardToOrder, checkGiftCard } from "@/lib/giftCards";
 
@@ -53,8 +54,8 @@ const Checkout = () => {
   });
 
   // Sendcloud Shipping Methods State
-  const [shippingMethods, setShippingMethods] = useState<SendcloudShippingMethod[]>(DEFAULT_SENDCLOUD_SHIPPING_METHODS);
-  const [selectedShippingId, setSelectedShippingId] = useState<string | number>(DEFAULT_SENDCLOUD_SHIPPING_METHODS[0].id);
+  const [shippingMethods, setShippingMethods] = useState<SendcloudShippingMethod[]>([]);
+  const [selectedShippingId, setSelectedShippingId] = useState<string | number>("");
 
   // Payment methods: paypal, card, klarna
   const [paymentMethod, setPaymentMethod] = useState("paypal");
@@ -84,20 +85,50 @@ const Checkout = () => {
     if (user?.email) setCustomerDetails((prev) => (prev.email ? prev : { ...prev, email: user.email! }));
   }, [user?.email]);
 
-  // Load Sendcloud shipping methods on mount
+  // Load shipping rates: first the shipping-rates function (Packlink, priced from the bag's weight and the
+  // address), then the built-in Sendcloud/demo list when that is not connected or the address is incomplete.
+  const ratesCountry = isoCountry(shippingAddress.country) || "DE";
+  const ratesItems = cartItems.map((item) => `${item.id}:${item.quantity}`).join(",");
+  const [debouncedPostal, setDebouncedPostal] = useState("");
   useEffect(() => {
+    const timer = setTimeout(() => setDebouncedPostal(shippingAddress.postalCode.trim()), 500);
+    return () => clearTimeout(timer);
+  }, [shippingAddress.postalCode]);
+
+  // No rates (and no price) until the shopper has entered a street address and a postal code.
+  const addressReady = shippingAddress.address.trim().length > 0 && debouncedPostal.length >= 3;
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!addressReady) {
+      setShippingMethods([]);
+      setSelectedShippingId("");
+      return;
+    }
     async function loadShippingMethods() {
-      const methods = await getSendcloudShippingMethods("DE");
-      if (methods && methods.length > 0) {
-        setShippingMethods(methods);
-        setSelectedShippingId(methods[0].id);
+      let methods: SendcloudShippingMethod[] = [];
+      try {
+        methods = await fetchCheckoutRates(ratesCountry, debouncedPostal, cartItems);
+      } catch {
+        methods = [];
       }
+      if (methods.length === 0) methods = await getSendcloudShippingMethods(ratesCountry);
+      if (cancelled || methods.length === 0) return;
+      setShippingMethods(methods);
+      // Keep the shopper's choice when it is still offered, otherwise pick the first.
+      setSelectedShippingId((current) => (methods.some((m) => String(m.id) === String(current)) ? current : methods[0].id));
     }
     loadShippingMethods();
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+    // cartItems is tracked through ratesItems so a new array identity does not refetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ratesCountry, debouncedPostal, ratesItems, addressReady]);
 
   // Selected Sendcloud method
-  const selectedShippingMethod = shippingMethods.find(m => String(m.id) === String(selectedShippingId)) || shippingMethods[0];
+  const selectedShippingMethod: SendcloudShippingMethod | undefined =
+    shippingMethods.find(m => String(m.id) === String(selectedShippingId)) || shippingMethods[0];
 
   // Helper to guarantee valid image fallback for cart items
   const getItemImage = (item: CartItem) => {
@@ -110,11 +141,11 @@ const Checkout = () => {
     return collectionImage;
   };
 
-  const baseShipping = selectedShippingMethod ? selectedShippingMethod.price : 3.9;
+  const baseShipping = selectedShippingMethod ? selectedShippingMethod.price : 0;
 
   // Used only when the server cannot price the bag (no Supabase, or before migration 0017).
   const fallbackShipping = (() => {
-    if (!selectedShippingMethod) return 3.9;
+    if (!selectedShippingMethod) return 0;
     if (selectedShippingMethod.freeThreshold && subtotal >= selectedShippingMethod.freeThreshold) return 0;
     return selectedShippingMethod.price;
   })();
@@ -209,6 +240,7 @@ const Checkout = () => {
       !shippingAddress.city.trim() ||
       !shippingAddress.postalCode.trim();
     if (missing) throw new Error(t("checkout.fillRequired"));
+    if (!selectedShippingMethod) throw new Error(t("checkout.shippingEnterAddress"));
     if (!canStoreOrders) return null;
 
     let placed: PlacedOrder;
@@ -238,6 +270,14 @@ const Checkout = () => {
     if (Math.abs(placed.amount_charged - total) > 0.009) throw new Error(t("checkout.priceChanged"));
     orderNumberRef.current = placed.order_number;
     setOrderNumber(placed.order_number);
+    if (selectedShippingMethod) {
+      await recordOrderShippingMethod(
+        placed.order_number,
+        customerDetails.email.trim(),
+        selectedShippingMethod.carrierName,
+        selectedShippingMethod.name,
+      );
+    }
 
     // Use the gift card on the order. If it covers everything, the server marks the order paid.
     if (giftCard && giftApplied > 0) {
@@ -496,9 +536,16 @@ const Checkout = () => {
                         </div>
                       ))}
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground">{t("checkout.shipping") || "Shipping"} ({selectedShippingMethod.carrierName})</span>
+                      <span className="text-muted-foreground">
+                        {t("checkout.shipping") || "Shipping"}
+                        {selectedShippingMethod ? ` (${selectedShippingMethod.carrierName})` : ""}
+                      </span>
                       <span className="text-foreground font-medium">
-                        {shippingCost === 0 ? t("checkout.free") : formatPrice(shippingCost)}
+                        {!selectedShippingMethod
+                          ? t("checkout.shippingPending")
+                          : shippingCost === 0
+                            ? t("checkout.free")
+                            : formatPrice(shippingCost)}
                       </span>
                     </div>
                     {hasPreorders && (
@@ -692,6 +739,11 @@ const Checkout = () => {
                     onValueChange={(val) => setSelectedShippingId(val)}
                     className="space-y-4"
                   >
+                    {shippingMethods.length === 0 && (
+                      <p className="rounded-sm border border-dashed border-border p-4 text-sm text-muted-foreground">
+                        {t("checkout.shippingEnterAddress")}
+                      </p>
+                    )}
                     {shippingMethods.map((method) => {
                       const cost = preview
                         ? (preview.free_shipping && String(method.id) === String(selectedShippingId) ? 0 : method.price)
@@ -795,7 +847,7 @@ const Checkout = () => {
                                       intent: "CAPTURE",
                                       purchase_units: [
                                         {
-                                          description: `Spavio AI Store Purchase (${selectedShippingMethod.carrierName} Delivery)`,
+                                          description: `Spavio AI Store Purchase (${selectedShippingMethod?.carrierName ?? ""} Delivery)`,
                                           ...(placed ? { custom_id: placed.order_number, invoice_id: placed.order_number } : {}),
                                           amount: {
                                             currency_code: "EUR",
@@ -1007,7 +1059,7 @@ const Checkout = () => {
                         {t("checkout.orderComplete") || "Order Confirmed!"}
                       </h3>
                       <p className="text-muted-foreground text-sm max-w-md mx-auto leading-relaxed">
-                        {t("checkout.thankYou", { carrier: `${selectedShippingMethod.carrierName} ${t(`checkout.methods.${selectedShippingMethod.id}.name`, { defaultValue: selectedShippingMethod.name })}`, email: customerDetails.email || t("checkout.yourEmail") })}
+                        {t("checkout.thankYou", { carrier: selectedShippingMethod ? `${selectedShippingMethod.carrierName} ${t(`checkout.methods.${selectedShippingMethod.id}.name`, { defaultValue: selectedShippingMethod.name })}` : "", email: customerDetails.email || t("checkout.yourEmail") })}
                       </p>
                       {orderNumber && (
                         <p className="text-sm text-foreground">

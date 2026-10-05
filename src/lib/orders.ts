@@ -98,6 +98,9 @@ export interface SalesOrder {
   source: "admin" | "checkout" | "exchange" | "draft";
   shipping_address: { address?: string; city?: string; postal_code?: string; country?: string };
   shipping_cost: number;
+  /** What the customer chose at checkout (empty for older orders). Needs migration 0025. */
+  shipping_carrier?: string;
+  shipping_service?: string;
   amount_charged: number;
   balance_due: number;
   payment_method: string;

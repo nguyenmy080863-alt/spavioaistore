@@ -1,5 +1,9 @@
 import { Link, Navigate, Outlet, useLocation } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { fetchTickets } from "@/lib/warranty";
+import { fetchSalesOrders } from "@/lib/orders";
+import { fetchReturns } from "@/lib/returns";
 import { useAdminAuth, ROLE_LABELS } from "@/context/AdminAuthContext";
 import { Button } from "@/components/ui/button";
 import StoreLogo from "@/components/StoreLogo";
@@ -11,6 +15,7 @@ import {
   SidebarHeader,
   SidebarInset,
   SidebarMenu,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuSub,
@@ -24,6 +29,17 @@ import { adminDocsNav, adminNav, adminOverview, adminSettingsNav, type AdminNavS
 const AdminLayout = () => {
   const { user, isAdmin, loading, roles, signOut } = useAdminAuth();
   const location = useLocation();
+
+  // Items waiting for the team, shown as a badge on the sidebar item. Each query shares its cache with its page.
+  const poll = { enabled: isAdmin, refetchInterval: 60_000 };
+  const { data: tickets = [] } = useQuery({ queryKey: ["warranty-tickets"], queryFn: fetchTickets, ...poll });
+  const { data: orders = [] } = useQuery({ queryKey: ["sales-orders"], queryFn: fetchSalesOrders, ...poll });
+  const { data: returns = [] } = useQuery({ queryKey: ["returns"], queryFn: fetchReturns, ...poll });
+  const pending: Record<string, number> = {
+    "/admin/warranty": tickets.filter((t) => t.status === "open").length,
+    "/admin/orders": orders.filter((o) => o.status === "open" && o.payment_status === "paid").length,
+    "/admin/returns": returns.filter((r) => r.status === "requested").length,
+  };
 
   if (loading) {
     return (
@@ -75,6 +91,7 @@ const AdminLayout = () => {
               <span>{section.title}</span>
             </Link>
           </SidebarMenuButton>
+          {pending[section.to] > 0 && <SidebarMenuBadge className="rounded-full bg-primary px-0 text-[0.65rem] text-primary-foreground peer-hover/menu-button:text-primary-foreground peer-data-[active=true]/menu-button:text-primary-foreground">{pending[section.to]}</SidebarMenuBadge>}
         </SidebarMenuItem>
       );
     }
@@ -88,6 +105,7 @@ const AdminLayout = () => {
               <span>{section.title}</span>
             </Link>
           </SidebarMenuButton>
+          {pending[section.to] > 0 && <SidebarMenuBadge className="right-7 rounded-full bg-primary px-0 text-[0.65rem] text-primary-foreground peer-hover/menu-button:text-primary-foreground peer-data-[active=true]/menu-button:text-primary-foreground">{pending[section.to]}</SidebarMenuBadge>}
           <ChevronRight className="pointer-events-none absolute right-2 top-2.5 h-4 w-4 text-muted-foreground transition-transform group-data-[state=open]/collapsible:rotate-90" />
           <CollapsibleContent>
             <SidebarMenuSub>

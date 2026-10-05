@@ -45,6 +45,8 @@ Tracking numbers can show "not found" for a few hours until the carrier's first 
 3. Deploy: `supabase functions deploy shipping-labels`
 4. Set the secrets: `supabase secrets set SENDCLOUD_PUBLIC_KEY=... SENDCLOUD_SECRET_KEY=...` (optional: `SHIP_FROM_COUNTRY=DE`, `SENDCLOUD_SENDER_ADDRESS_ID=123`). The same keys also serve the return label function.
 5. Test: create a delivery for a paid order and buy a label.
+**Test-labels-only (on by default).** Until you set the secret `SENDCLOUD_TEST_ONLY=false`, the function only offers and buys Sendcloud's **Unstamped letter** method, so no real DHL or DPD label can be bought by mistake. Unstamped letters carry no shipping charge, but Sendcloud may still bill a small processing fee per label and limits free test labels (check your plan). Test labels use a weight the letter method accepts, not the real parcel weight, so this mode cannot test prices or weight rules. Set `SENDCLOUD_TEST_ONLY=false` only on the production project, after testing. Return labels (`create-return-label`) cannot be tested with Unstamped letter.
+
 **Security:** do not put the Sendcloud secret key in a `VITE_` variable. Anything with that prefix is visible to every visitor of the website.
 
 ## Not built yet

@@ -122,7 +122,7 @@ export const fetchProductWeights = async (ids: string[]): Promise<Record<string,
 };
 
 export interface ShippingMethod {
-  id: number;
+  id: string; // Sendcloud v3 shipping_option_code, e.g. "dhl:standard"
   name: string;
   carrier: string;
   price: number;
@@ -135,7 +135,7 @@ export const NOT_CONNECTED = "sendcloud_not_connected";
 export const fetchShippingMethods = async (country: string, weightGrams: number) =>
   (await invokeStaffFunction<{ methods: ShippingMethod[] }>("shipping-labels", { action: "methods", country, weight_grams: weightGrams })).methods;
 
-export const buyShippingLabel = (deliveryId: string, methodId: number, weightGrams: number, recipient: Recipient) =>
+export const buyShippingLabel = (deliveryId: string, methodId: string, weightGrams: number, recipient: Recipient) =>
   invokeStaffFunction<{ ok: boolean; tracking_number: string | null; label_cost: number; service: string }>("shipping-labels", {
     action: "buy",
     delivery_id: deliveryId,

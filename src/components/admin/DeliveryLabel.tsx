@@ -92,7 +92,7 @@ const DeliveryLabel = ({ delivery, order, onChanged }: DeliveryLabelProps) => {
   const buy = useMutation({
     mutationFn: async () => {
       if (!methodId) throw new Error("Choose a shipping service");
-      const result = await buyShippingLabel(delivery.id, Number(methodId), debouncedWeight, { ...recipient, country });
+      const result = await buyShippingLabel(delivery.id, methodId, debouncedWeight, { ...recipient, country });
       await logAudit("buy_label", "delivery_order", delivery.id, { delivery: delivery.delivery_number, cost: result.label_cost });
       return result;
     },
