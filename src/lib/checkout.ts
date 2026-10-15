@@ -1,5 +1,5 @@
 import { db, run } from "@/lib/orders";
-import { isSupabaseConfigured } from "@/integrations/supabase/client";
+import { isSupabaseConfigured, supabase } from "@/integrations/supabase/client";
 import type { CartItem } from "@/context/CartContext";
 
 export interface PlacedOrder {
@@ -71,3 +71,21 @@ export const recordOrderShippingMethod = async (orderNumber: string, email: stri
 /** Stores the payment reference on the order; an admin still has to mark the order as paid. */
 export const recordOrderPayment = (orderNumber: string, email: string, reference: string) =>
   run(db.rpc("record_order_payment", { p_order_number: orderNumber, p_email: email, p_reference: reference }));
+
+/**
+ * Asks the server to verify the PayPal payment and mark the order as paid. Best effort: when it is
+ * not connected or fails, the order stays unpaid and staff mark it as paid by hand.
+ */
+export const confirmOrderPayment = async (orderNumber: string, email: string, paypalOrderId: string): Promise<boolean> => {
+  const { data, error } = await supabase.functions.invoke("confirm-order-payment", {
+    body: { order_number: orderNumber, email, paypal_order_id: paypalOrderId },
+  });
+  if (error || !data?.ok) {
+    // supabase-js hides the answer of a non-2xx call inside error.context, so read the reason from there.
+    const response = (error as { context?: Response } | null)?.context;
+    const detail = response ? await response.json().catch(() => null) : data;
+    console.warn("The payment was not confirmed automatically:", detail?.error ?? detail?.message ?? error?.message);
+    return false;
+  }
+  return true;
+};

@@ -20,13 +20,16 @@ import {
 import SEO from "@/components/SEO";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAdminAuth } from "@/context/AdminAuthContext";
-import { canStoreOrders, placeOrder, recordOrderPayment, recordOrderShippingMethod, type PlacedOrder } from "@/lib/checkout";
+import { canStoreOrders, confirmOrderPayment, placeOrder, recordOrderPayment, recordOrderShippingMethod, type PlacedOrder } from "@/lib/checkout";
 import { fetchCheckoutRates } from "@/lib/shippingRates";
 import { isoCountry } from "@/lib/shipping";
 import { clearStoredCode, getStoredCode, previewCart } from "@/lib/discounts";
 import { applyGiftCardToOrder, checkGiftCard } from "@/lib/giftCards";
 
 const PAYPAL_CLIENT_ID = import.meta.env.VITE_PAYPAL_CLIENT_ID || "";
+// A stable object: a new one on every render would make the PayPal script reload while the shopper types.
+// A private namespace keeps the SDK away from any window.paypal that an extension or an earlier load left behind.
+const PAYPAL_OPTIONS = { clientId: PAYPAL_CLIENT_ID || "test", currency: "EUR", components: "buttons", dataNamespace: "spavioPayPal" };
 
 const Checkout = () => {
   const { t, i18n } = useTranslation("shop");
@@ -87,7 +90,7 @@ const Checkout = () => {
 
   // Load shipping rates: first the shipping-rates function (Packlink, priced from the bag's weight and the
   // address), then the built-in Sendcloud/demo list when that is not connected or the address is incomplete.
-  const ratesCountry = isoCountry(shippingAddress.country) || "DE";
+  const ratesCountry = isoCountry(shippingAddress.country);
   const ratesItems = cartItems.map((item) => `${item.id}:${item.quantity}`).join(",");
   const [debouncedPostal, setDebouncedPostal] = useState("");
   useEffect(() => {
@@ -96,7 +99,8 @@ const Checkout = () => {
   }, [shippingAddress.postalCode]);
 
   // No rates (and no price) until the shopper has entered a street address and a postal code.
-  const addressReady = shippingAddress.address.trim().length > 0 && debouncedPostal.length >= 3;
+  // An unrecognised country (still being typed, or not an EU country) gets no rates instead of quietly using Germany's.
+  const addressReady = shippingAddress.address.trim().length > 0 && debouncedPostal.length >= 3 && ratesCountry !== "";
 
   useEffect(() => {
     let cancelled = false;
@@ -335,7 +339,7 @@ const Checkout = () => {
   };
 
   return (
-    <PayPalScriptProvider options={{ clientId: PAYPAL_CLIENT_ID || "test", currency: "EUR" }}>
+    <PayPalScriptProvider options={PAYPAL_OPTIONS}>
       <div className="min-h-screen bg-background font-sans">
         <SEO
           page="checkout"
@@ -826,7 +830,8 @@ const Checkout = () => {
                               )}
                               <div className="pt-2">
                                 <PayPalButtons
-                                  style={{ layout: "vertical", color: "black", shape: "rect", label: "pay" }}
+                                  fundingSource="paypal"
+                                  style={{ layout: "vertical", color: "gold", shape: "rect", label: "pay", height: 48, borderRadius: 4, tagline: false }}
                                   disabled={cartItems.length === 0}
                                   createOrder={async (_data, actions) => {
                                     setOrderError(null);
@@ -872,6 +877,12 @@ const Checkout = () => {
                                           // The payment went through; staff can match it by the PayPal invoice id.
                                           console.error("Could not store the PayPal reference:", err);
                                         }
+                                        // The server checks the payment with PayPal and marks the order paid.
+                                        void confirmOrderPayment(
+                                          orderNumberRef.current,
+                                          customerDetails.email.trim(),
+                                          String(details.id ?? ""),
+                                        );
                                       }
                                                                         setConfirmedBalance(dueLater);
                                       setPaymentComplete(true);
